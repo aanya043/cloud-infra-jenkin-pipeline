@@ -5,7 +5,7 @@ pipeline {
     }
     environment {
         HADOOP_IP = '34.133.31.146' 
-        GCS_BUCKET = 'hadoop-jobs-bucket-165fb971'  // Replace with bucket name from Step 1
+        GCS_BUCKET = 'hadoop-jobs-bucket-165fb971'
     }
     stages {
         stage('Checkout') {
