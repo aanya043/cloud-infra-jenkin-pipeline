@@ -2,22 +2,14 @@ pipeline {
   agent any
 
   environment {
-    SONARQUBE_SERVER_NAME = 'SonarQube'         // Jenkins > Configure System > SonarQube servers (Name)
-    SONAR_SCANNER_TOOL    = 'SonarQube-Scanner' // Jenkins > Global Tool Config (Name)
-    SONAR_PROJECT_KEY     = 'my-14848.linecount'// Any unique string
-    HADOOP_USER           = 'ananya'            // Linux user on Hadoop master
-    HADOOP_HOST           = '136.112.107.232'   // External IP of hadoop-cluster-m
+    SONARQUBE_SERVER_NAME = 'SonarQube'
+    SONAR_SCANNER_TOOL    = 'SonarQube-Scanner'
+    SONAR_PROJECT_KEY     = 'my-14848.linecount'
+    HADOOP_USER           = 'ananya'
+    HADOOP_HOST           = '136.112.107.232'
   }
 
-  options {
-    timestamps()
-    ansiColor('xterm')
-  }
-
-  triggers {
-    // Requires GitHub webhook to Jenkins: http://<jenkins>/github-webhook/
-    githubPush()
-  }
+  triggers { githubPush() }
 
   stages {
     stage('Checkout') {
@@ -49,11 +41,9 @@ pipeline {
       steps {
         timeout(time: 10, unit: 'MINUTES') {
           script {
-            def qg = waitForQualityGate()   // SonarQube -> Jenkins webhook recommended
+            def qg = waitForQualityGate()
             echo "Quality Gate: ${qg.status}"
-            if (qg.status != 'OK') {
-              error "Quality Gate failed: ${qg.status}"
-            }
+            if (qg.status != 'OK') { error "Quality Gate failed: ${qg.status}" }
           }
         }
       }
@@ -63,10 +53,7 @@ pipeline {
       steps {
         sshagent(credentials: ['hadoop-ssh-key']) {
           sh """
-            # 1) Copy repo + scripts to Hadoop master
             rsync -avz -e "ssh -o StrictHostKeyChecking=no" ./ ${HADOOP_USER}@${HADOOP_HOST}:/tmp/workspace-${env.BUILD_TAG}/
-
-            # 2) Run the job on the master
             ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} \\
               'cd /tmp/workspace-${env.BUILD_TAG} && \\
                chmod +x mapper.py reducer.py run_hadoop_linecount.sh && \\
@@ -79,9 +66,7 @@ pipeline {
     stage('Fetch & Display Results') {
       steps {
         sshagent(credentials: ['hadoop-ssh-key']) {
-          sh """
-            scp -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST}:/tmp/workspace-${env.BUILD_TAG}/linecount.txt .
-          """
+          sh 'scp -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST}:/tmp/workspace-${env.BUILD_TAG}/linecount.txt . || true'
         }
         echo "===== Hadoop Line Counts ====="
         sh 'cat linecount.txt || true'
@@ -91,11 +76,8 @@ pipeline {
   }
 
   post {
-    always {
-      echo 'Done.'
-    }
+    always { echo 'Done.' }
     cleanup {
-      // optional: purge remote temp workspace
       sshagent(credentials: ['hadoop-ssh-key']) {
         sh 'ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "rm -rf /tmp/workspace-${BUILD_TAG}" || true'
       }
