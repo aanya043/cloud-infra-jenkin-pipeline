@@ -51,7 +51,7 @@ pipeline {
 
     stage('Run Hadoop MapReduce (per-file line counts)') {
       steps {
-        sshagent(credentials: ['hadoop-ssh-key']) {   // see #2 to fix the credential ID
+        sshagent(credentials: ['ananya-ssh']) {   // see #2 to fix the credential ID
           sh """
             # --- Create remote workspace ---
             ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} 'mkdir -p /tmp/workspace-${env.BUILD_TAG}'
@@ -72,7 +72,7 @@ pipeline {
 
     stage('Fetch & Display Results') {
       steps {
-        sshagent(credentials: ['hadoop-ssh-key']) {
+        sshagent(credentials: ['ananya-ssh']) {
           sh 'scp -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST}:/tmp/workspace-${env.BUILD_TAG}/linecount.txt . || true'
         }
         echo "===== Hadoop Line Counts ====="
