@@ -1,53 +1,104 @@
 pipeline {
-    agent any
-    tools {
-        jdk 'JDK 11'
+  agent any
+
+  environment {
+    SONARQUBE_SERVER_NAME = 'SonarQube'         // Jenkins > Configure System > SonarQube servers (Name)
+    SONAR_SCANNER_TOOL    = 'SonarQube-Scanner' // Jenkins > Global Tool Config (Name)
+    SONAR_PROJECT_KEY     = 'my-14848.linecount'// Any unique string
+    HADOOP_USER           = 'ananya'            // Linux user on Hadoop master
+    HADOOP_HOST           = '136.112.107.232'   // External IP of hadoop-cluster-m
+  }
+
+  options {
+    timestamps()
+    ansiColor('xterm')
+  }
+
+  triggers {
+    // Requires GitHub webhook to Jenkins: http://<jenkins>/github-webhook/
+    githubPush()
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        sh 'echo "Workspace: $PWD"; ls -la'
+      }
     }
-    environment {
-        HADOOP_IP = '34.133.31.146' 
-        GCS_BUCKET = 'hadoop-jobs-bucket-165fb971'
+
+    stage('SonarQube Analysis') {
+      steps {
+        withSonarQubeEnv("${SONARQUBE_SERVER_NAME}") {
+          script {
+            def scannerHome = tool "${SONAR_SCANNER_TOOL}"
+            sh """
+              ${scannerHome}/bin/sonar-scanner \
+                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                -Dsonar.projectName=${SONAR_PROJECT_KEY} \
+                -Dsonar.sources=. \
+                -Dsonar.host.url=${SONAR_HOST_URL} \
+                -Dsonar.login=${SONAR_AUTH_TOKEN}
+            """
+          }
+        }
+      }
     }
-    stages {
-        stage('Checkout') {
-            steps {
-                git url: 'https://github.com/aanya043/python-code-disasters.git', branch: 'main'
+
+    stage('Quality Gate') {
+      steps {
+        timeout(time: 10, unit: 'MINUTES') {
+          script {
+            def qg = waitForQualityGate()   // SonarQube -> Jenkins webhook recommended
+            echo "Quality Gate: ${qg.status}"
+            if (qg.status != 'OK') {
+              error "Quality Gate failed: ${qg.status}"
             }
+          }
         }
-        stage('SonarQube Analysis') {
-            steps {
-                script {
-                    def scannerHome = tool 'SonarQube Scanner'
-                    withSonarQubeEnv('SonarQube') {
-                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=python-code-disasters -Dsonar.sources=."
-                    }
-                }
-            }
-        }
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-        stage('Run Hadoop Job') {
-            when { expression { env.QUALITY_GATE == 'PASSED' } }
-            steps {
-                withCredentials([sshUserPrivateKey(credentialsId: 'hadoop-ssh-key', keyFileVariable: 'SSH_KEY')]) {
-                    sh '''
-                    ssh -i $SSH_KEY -o StrictHostKeyChecking=no YOUR_USERNAME@$HADOOP_IP 'bash -s' < run_hadoop_job.sh
-                    '''
-                }
-            }
-        }
+      }
     }
-    post {
-        success {
-            sh '''
-            gsutil cp gs://$GCS_BUCKET/results.txt .
-            echo "<html><body><h2>Hadoop Job Results</h2><pre>$(cat results.txt)</pre></body></html>" > results.html
-            '''
-            archiveArtifacts artifacts: 'results.html', allowEmptyArchive: true
+
+    stage('Run Hadoop MapReduce (per-file line counts)') {
+      steps {
+        sshagent(credentials: ['hadoop-ssh-key']) {
+          sh """
+            # 1) Copy repo + scripts to Hadoop master
+            rsync -avz -e "ssh -o StrictHostKeyChecking=no" ./ ${HADOOP_USER}@${HADOOP_HOST}:/tmp/workspace-${env.BUILD_TAG}/
+
+            # 2) Run the job on the master
+            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} \\
+              'cd /tmp/workspace-${env.BUILD_TAG} && \\
+               chmod +x mapper.py reducer.py run_hadoop_linecount.sh && \\
+               WORKDIR=/tmp/workspace-${env.BUILD_TAG} bash ./run_hadoop_linecount.sh'
+          """
         }
+      }
     }
+
+    stage('Fetch & Display Results') {
+      steps {
+        sshagent(credentials: ['hadoop-ssh-key']) {
+          sh """
+            scp -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST}:/tmp/workspace-${env.BUILD_TAG}/linecount.txt .
+          """
+        }
+        echo "===== Hadoop Line Counts ====="
+        sh 'cat linecount.txt || true'
+        archiveArtifacts artifacts: 'linecount.txt', onlyIfSuccessful: true, allowEmptyArchive: true
+      }
+    }
+  }
+
+  post {
+    always {
+      echo 'Done.'
+    }
+    cleanup {
+      // optional: purge remote temp workspace
+      sshagent(credentials: ['hadoop-ssh-key']) {
+        sh 'ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "rm -rf /tmp/workspace-${BUILD_TAG}" || true'
+      }
+    }
+  }
 }
