@@ -51,17 +51,24 @@ pipeline {
 
     stage('Run Hadoop MapReduce (per-file line counts)') {
       steps {
-        sshagent(credentials: ['hadoop-ssh-key']) {
+        sshagent(credentials: ['hadoop-ssh-key']) {   // see #2 to fix the credential ID
           sh """
-            rsync -avz -e "ssh -o StrictHostKeyChecking=no" ./ ${HADOOP_USER}@${HADOOP_HOST}:/tmp/workspace-${env.BUILD_TAG}/
+            # --- Create remote workspace ---
+            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} 'mkdir -p /tmp/workspace-${env.BUILD_TAG}'
+
+            # --- Copy repo (tar over ssh, no rsync needed) ---
+            tar -cf - . | ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} 'tar -xf - -C /tmp/workspace-${env.BUILD_TAG}'
+
+            # --- Run job ---
             ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} \\
               'cd /tmp/workspace-${env.BUILD_TAG} && \\
-               chmod +x mapper.py reducer.py run_hadoop_linecount.sh && \\
-               WORKDIR=/tmp/workspace-${env.BUILD_TAG} bash ./run_hadoop_linecount.sh'
+              chmod +x mapper.py reducer.py run_hadoop_linecount.sh && \\
+              WORKDIR=/tmp/workspace-${env.BUILD_TAG} bash ./run_hadoop_linecount.sh'
           """
         }
       }
     }
+
 
     stage('Fetch & Display Results') {
       steps {
