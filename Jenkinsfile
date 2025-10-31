@@ -85,7 +85,7 @@ pipeline {
   post {
     always { echo 'Done.' }
     cleanup {
-      sshagent(credentials: ['hadoop-ssh-key']) {
+      sshagent(credentials: ['ananya-ssh']) {
         sh 'ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "rm -rf /tmp/workspace-${BUILD_TAG}" || true'
       }
     }
