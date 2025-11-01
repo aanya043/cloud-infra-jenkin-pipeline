@@ -75,8 +75,6 @@ pipeline {
       }
     }
 
-
-
     stage('Fetch & Display Results') {
       steps {
         sshagent(credentials: ['ananya-ssh']) {
@@ -92,7 +90,7 @@ pipeline {
         archiveArtifacts artifacts: 'linecount.txt', onlyIfSuccessful: true, allowEmptyArchive: false
       }
     }
-
+  }  // <- closes stages
 
   post {
     always { echo 'Done.' }
@@ -102,5 +100,4 @@ pipeline {
       }
     }
   }
-}
 }
