@@ -80,9 +80,7 @@ pipeline {
         sshagent(credentials: ['ananya-ssh']) {
           sh '''
             set -euxo pipefail
-            REMOTE_DIR="/tmp/workspace-${BUILD_TAG}"
-            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "ls -la ${REMOTE_DIR} || true"
-            scp -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST}:${REMOTE_DIR}/linecount.txt ./linecount.txt
+            scp -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST}:/tmp/results.txt ./linecount.txt
           '''
         }
         echo "===== Hadoop Line Counts ====="
@@ -90,7 +88,7 @@ pipeline {
         archiveArtifacts artifacts: 'linecount.txt', onlyIfSuccessful: true, allowEmptyArchive: false
       }
     }
-  }  // <- closes stages
+  } 
 
   post {
     always { echo 'Done.' }
