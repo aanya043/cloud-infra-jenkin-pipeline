@@ -19,8 +19,8 @@ hadoop fs -put -f *.py /tmp/input/
 # Run streaming job
 hadoop jar "$STREAMING_JAR" \
   -files mapper.py,reducer.py \
-  -mapper mapper.py \
-  -reducer reducer.py \
+  -mapper "python3 mapper.py" \
+  -reducer "python3 reducer.py" \
   -input /tmp/input \
   -output /tmp/output
 
