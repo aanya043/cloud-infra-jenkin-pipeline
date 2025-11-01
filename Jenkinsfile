@@ -51,23 +51,30 @@ pipeline {
 
     stage('Run Hadoop MapReduce (per-file line counts)') {
       steps {
-        sshagent(credentials: ['ananya-ssh']) {   // see #2 to fix the credential ID
-          sh """
-            # --- Create remote workspace ---
-            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} 'mkdir -p /tmp/workspace-${env.BUILD_TAG}'
+        sshagent(credentials: ['ananya-ssh']) {
+          sh '''
+            set -euxo pipefail
+            REMOTE_DIR="/tmp/workspace-${BUILD_TAG}"
 
-            # --- Copy repo (tar over ssh, no rsync needed) ---
-            tar -cf - . | ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} 'tar -xf - -C /tmp/workspace-${env.BUILD_TAG}'
+            # Create remote dir
+            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "mkdir -p ${REMOTE_DIR}"
 
-            # --- Run job ---
-            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} \\
-              'cd /tmp/workspace-${env.BUILD_TAG} && \\
-              chmod +x mapper.py reducer.py run_hadoop_linecount.sh && \\
-              WORKDIR=/tmp/workspace-${env.BUILD_TAG} bash ./run_hadoop_linecount.sh'
-          """
+            # Copy repo (no rsync needed)
+            tar -cf - . | ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "tar -xf - -C ${REMOTE_DIR}"
+
+            # Show what arrived
+            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "set -eux; ls -la ${REMOTE_DIR}"
+
+            # Ensure script exists (use the actual filename in your repo)
+            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "test -f ${REMOTE_DIR}/run_hadoop_linecount.sh || (echo 'run_hadoop_linecount.sh not found!' >&2; exit 2)"
+
+            # Run the job (login shell to get PATH for hadoop/python)
+            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "bash -lc 'cd ${REMOTE_DIR} && chmod +x mapper.py reducer.py run_hadoop_job.sh && WORKDIR=${REMOTE_DIR} ./run_hadoop_job.sh'"
+          '''
         }
       }
     }
+
 
 
     stage('Fetch & Display Results') {
