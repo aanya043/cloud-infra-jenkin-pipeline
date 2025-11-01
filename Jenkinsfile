@@ -80,14 +80,19 @@ pipeline {
     stage('Fetch & Display Results') {
       steps {
         sshagent(credentials: ['ananya-ssh']) {
-          sh 'scp -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST}:/tmp/workspace-${env.BUILD_TAG}/linecount.txt . || true'
+          sh '''
+            set -euxo pipefail
+            REMOTE_DIR="/tmp/workspace-${BUILD_TAG}"
+            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "ls -la ${REMOTE_DIR} || true"
+            scp -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST}:${REMOTE_DIR}/linecount.txt ./linecount.txt
+          '''
         }
         echo "===== Hadoop Line Counts ====="
-        sh 'cat linecount.txt || true'
-        archiveArtifacts artifacts: 'linecount.txt', onlyIfSuccessful: true, allowEmptyArchive: true
+        sh 'set -e; test -s linecount.txt && cat linecount.txt || { echo "linecount.txt missing/empty"; exit 2; }'
+        archiveArtifacts artifacts: 'linecount.txt', onlyIfSuccessful: true, allowEmptyArchive: false
       }
     }
-  }
+
 
   post {
     always { echo 'Done.' }
