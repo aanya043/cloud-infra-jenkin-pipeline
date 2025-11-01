@@ -1,4 +1,20 @@
 #!/bin/bash
+set -euo pipefail
+
+# --- Locate Hadoop Streaming JAR dynamically ---
+DEFAULT_STREAMING_JAR="/usr/lib/hadoop-mapreduce/hadoop-streaming.jar"
+if [ -f "$DEFAULT_STREAMING_JAR" ]; then
+  STREAMING_JAR="$DEFAULT_STREAMING_JAR"
+else
+  STREAMING_JAR="$(hadoop classpath | tr ':' '\n' | grep -m1 'streaming.*jar' || true)"
+fi
+
+if [ -z "$STREAMING_JAR" ] || [ ! -f "$STREAMING_JAR" ]; then
+  echo "[ERROR] Could not locate Hadoop Streaming JAR on this node." >&2
+  exit 1
+fi
+echo "[INFO] Using streaming jar: $STREAMING_JAR"
+
 hadoop fs -rm -r /tmp/input /tmp/output
 hadoop fs -mkdir /tmp/input
 hadoop fs -put *.py /tmp/input/
