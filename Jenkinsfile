@@ -69,7 +69,7 @@ pipeline {
             ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "test -f ${REMOTE_DIR}/run_hadoop_linecount.sh || (echo 'run_hadoop_linecount.sh not found!' >&2; exit 2)"
 
             # Run the job (login shell to get PATH for hadoop/python)
-            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "bash -lc 'cd ${REMOTE_DIR} && chmod +x mapper.py reducer.py run_hadoop_job.sh && WORKDIR=${REMOTE_DIR} ./run_hadoop_job.sh'"
+            ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${HADOOP_HOST} "bash -lc 'cd ${REMOTE_DIR} && chmod +x mapper.py reducer.py run_hadoop_linecount.sh && WORKDIR=${REMOTE_DIR} ./run_hadoop_linecount.sh'"
           '''
         }
       }
